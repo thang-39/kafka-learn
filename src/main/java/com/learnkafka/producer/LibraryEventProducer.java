@@ -4,6 +4,9 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.learnkafka.domain.LibraryEvent;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.header.Header;
+import org.apache.kafka.common.header.internals.RecordHeader;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.SendResult;
@@ -11,6 +14,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.concurrent.ListenableFuture;
 import org.springframework.util.concurrent.ListenableFutureCallback;
 
+import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -21,6 +25,8 @@ public class LibraryEventProducer {
 
     @Autowired
     KafkaTemplate<Integer,String> kafkaTemplate;
+
+    String topic = "library-events";
 
     @Autowired
     ObjectMapper objectMapper;
@@ -49,7 +55,9 @@ public class LibraryEventProducer {
         int key = libraryEvent.getLibraryEventId();
         String value = objectMapper.writeValueAsString(libraryEvent);
 
-        ListenableFuture<SendResult<Integer,String>> listenableFuture = kafkaTemplate.send("library-events",key,value);
+        ProducerRecord<Integer,String> producerRecord = buildProducerRecord(key,value,topic);
+
+        ListenableFuture<SendResult<Integer,String>> listenableFuture = kafkaTemplate.send(producerRecord);
         listenableFuture.addCallback(new ListenableFutureCallback<SendResult<Integer, String>>() {
             @Override
             public void onFailure(Throwable ex) {
@@ -61,6 +69,15 @@ public class LibraryEventProducer {
                 handleSuccess(key,value,result);
             }
         });
+    }
+
+    private ProducerRecord<Integer, String> buildProducerRecord(int key, String value, String topic) {
+
+        List<Header> recordHeaders = List.of(
+                new RecordHeader("event-source","scanner".getBytes())
+//                new RecordHeader("event-source","scanner".getBytes())
+        );
+        return new ProducerRecord<>(topic,null,key,value,null);
     }
 
     public SendResult<Integer, String> sendLibraryEventSynchronous(LibraryEvent libraryEvent) throws JsonProcessingException, ExecutionException, InterruptedException, TimeoutException {
